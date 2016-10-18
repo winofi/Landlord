@@ -4,6 +4,7 @@ import com.jcdesimp.landlord.Landlord;
 import com.jcdesimp.landlord.landManagement.Landflag;
 import com.jcdesimp.landlord.persistantData.OwnedLand;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
@@ -18,6 +19,7 @@ import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * File created by jcdesimp on 4/11/14.
@@ -61,6 +63,29 @@ public class Build extends Landflag {
      ******************************************************************************
      */
 
+    /**
+     * Check if the player can build on the specified location, default is false returns only true if the player has
+     * landlord.admin.bypass or owns the land. (Freebuild is NOT garanted).
+     * @param p the Player to check
+     * @param l the Location
+     * @return true if he/she can build, false if not
+     */
+    public boolean canBuildAt(Player p, Location l) {
+        OwnedLand land = OwnedLand.getApplicableLand(l);
+
+        //check if landlord is enabled for this world
+        String cworldname = l.getWorld().getName();
+
+        List<String> disabledWorlds = getPlugin().getConfig().getStringList("disabled-worlds");
+        for (String s : disabledWorlds) {
+            if (s.equalsIgnoreCase(cworldname)) {
+                //it is disabled for this world, so allowing this action
+                return true;
+            }
+        }
+
+        return p.hasPermission("landlord.admin.bypass") || (land != null && land.hasPermTo(p, this));
+    }
 
     /**
      * Event handler for block placements
@@ -69,35 +94,12 @@ public class Build extends Landflag {
      */
     @EventHandler(priority = EventPriority.HIGH)
     public void blockPlace(BlockPlaceEvent event) {
-
-        /*
-         *******************************
-         * Call getApplicableLand(location)
-         * If it's null the action didn't happen on owned land
-         * and could be ignored.
-         *******************************
-         */
-        OwnedLand land = OwnedLand.getApplicableLand(event.getBlock().getLocation());
-        if (land == null) {
-            return;
-        }
-
-        //get the player associated with the event. (Might want to check for null if applicable to the event)
         Player p = event.getPlayer();
 
-        /*
-         *************************************
-         * Finally check if the player has permission for your flag
-         * with land.hasPermTo(player, this) ('this' representing this flag of course)
-         * If they have permission to do the action you're checking for, you shouldn't
-         * have to cancel the event.
-         *************************************
-         */
-        if (!land.hasPermTo(p, this)) {
+        if (!canBuildAt(p, event.getBlock().getLocation())) {
             p.sendMessage(ChatColor.RED + getPlugin().getMessageConfig().getString("event.build.blockPlace"));
             event.setCancelled(true);
         }
-
     }
 
     /*
@@ -109,13 +111,9 @@ public class Build extends Landflag {
      */
     @EventHandler(priority = EventPriority.HIGH)
     public void blockBreak(BlockBreakEvent event) {
-        OwnedLand land = OwnedLand.getApplicableLand(event.getBlock().getLocation());
-        if (land == null) {
-            return;
-        }
         Player p = event.getPlayer();
 
-        if (!land.hasPermTo(p, this)) {
+        if (!canBuildAt(p, event.getBlock().getLocation())) {
             p.sendMessage(ChatColor.RED + getPlugin().getMessageConfig().getString("event.build.blockBreak"));
             event.setCancelled(true);
         }
@@ -123,14 +121,9 @@ public class Build extends Landflag {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void liquidEmpty(PlayerBucketEmptyEvent event) {
-        OwnedLand land = OwnedLand.getApplicableLand(event.getBlockClicked().getLocation());
-        if (land == null) {
-            return;
-        }
-
         Player p = event.getPlayer();
 
-        if (!land.hasPermTo(p, this)) {
+        if (!canBuildAt(p, event.getBlockClicked().getLocation())) {
             p.sendMessage(ChatColor.RED + getPlugin().getMessageConfig().getString("event.build.bucketEmpty"));
             event.setCancelled(true);
         }
@@ -138,13 +131,9 @@ public class Build extends Landflag {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void liquidFill(PlayerBucketFillEvent event) {
-        OwnedLand land = OwnedLand.getApplicableLand(event.getBlockClicked().getLocation());
-        if (land == null) {
-            return;
-        }
         Player p = event.getPlayer();
 
-        if (!land.hasPermTo(p, this)) {
+        if (!canBuildAt(p, event.getBlockClicked().getLocation())) {
             p.sendMessage(ChatColor.RED + getPlugin().getMessageConfig().getString("event.build.bucketFill"));
             event.setCancelled(true);
         }
@@ -154,21 +143,14 @@ public class Build extends Landflag {
     public void paintingFrameBreak(HangingBreakByEntityEvent event) {
         org.bukkit.entity.Entity victim = event.getEntity();
         org.bukkit.entity.Entity remover = event.getRemover();
-        OwnedLand land = OwnedLand.getApplicableLand(victim.getLocation());
-        if (land == null) {
-            return;
-        }
+
         if (remover.getType().toString().equals("PLAYER")) {
             Player p = (Player) remover;
-            if (!land.hasPermTo(p, this)) {
+            if (!canBuildAt(p, victim.getLocation())) {
                 p.sendMessage(ChatColor.RED + getPlugin().getMessageConfig().getString("event.build.hangingBreak"));
                 event.setCancelled(true);
             }
-            //System.out.println("Attacker Name:" + p.getName());
-
-
         }
-
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -177,17 +159,10 @@ public class Build extends Landflag {
             return;
         }
 
-        OwnedLand land = OwnedLand.getApplicableLand(event.getRightClicked().getLocation());
-        if (land == null) {
-            return;
-        }
-
-        if (!land.hasPermTo(event.getPlayer(), this)) {
+        if (!canBuildAt(event.getPlayer(), event.getRightClicked().getLocation())) {
             event.getPlayer().sendMessage(ChatColor.RED + getPlugin().getMessageConfig().getString("event.build.useArmorStand"));
             event.setCancelled(true);
         }
-
-
     }
 
 
@@ -208,25 +183,23 @@ public class Build extends Landflag {
         if (event.getDamager().getType().equals(EntityType.PLAYER)) {
             Player attacker = (Player) event.getDamager();
             //System.out.println(attacker.getName());
-            if (!land.hasPermTo(attacker, this)) {
+            if (!canBuildAt(attacker, attacker.getLocation())) {
                 attacker.sendMessage(ChatColor.RED + getPlugin().getMessageConfig().getString("event.build.breakArmorStandWithMelee"));
                 event.setCancelled(true);
             }
-
         }
+
         if (event.getDamager().getType().equals(EntityType.ARROW)) {
             Arrow projectile = (Arrow) event.getDamager();
             if (projectile.getShooter() instanceof Player) {
                 Player attacker = (Player) projectile.getShooter();
-                if (!land.hasPermTo(attacker, this)) {
+                if (!canBuildAt(attacker, attacker.getLocation())) {
                     attacker.sendMessage(ChatColor.RED + getPlugin().getMessageConfig().getString("event.build.breakArmorStandWithArrow"));
                     event.setCancelled(true);
                 }
             }
 
         }
-        //System.out.println(event.getDamager().getType());
-
     }
 
 
